@@ -1,0 +1,211 @@
+import { supabase, s3 } from '$lib/supabaseClient';
+import { fail } from '@sveltejs/kit';
+import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+
+export const load = async ({ setHeaders }) => {
+    setHeaders({
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    });
+
+    const { data: products, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('position', { ascending: true, nullsFirst: false })
+        .order('id', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching products:', error);
+        return { products: [] };
+    }
+
+    return { products };
+};
+
+export const actions = {
+    create: async ({ request }) => {
+        const formData = await request.formData();
+        const title = formData.get('title');
+        const price = formData.get('price');
+        const buy_link = formData.get('buy_link');
+        const category = formData.get('category');
+
+        const image1File = formData.get('image_1');
+        const image2File = formData.get('image_2');
+        const image3File = formData.get('image_3');
+
+        if (!title || !price || !buy_link || !category || !image1File || image1File.size === 0) {
+            return fail(400, { message: 'Por favor, preencha todos os campos obrigatórios.' });
+        }
+
+        const uploadFile = async (file) => {
+            if (!file || file.size === 0) return null;
+
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+            const arrayBuffer = await file.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+
+            try {
+                await s3.send(new PutObjectCommand({
+                    Bucket: process.env.AWS_BUCKET_NAME || 'products',
+                    Key: fileName,
+                    Body: buffer,
+                    ContentType: file.type,
+                    ACL: 'public-read'
+                }));
+                // Using Supabase Storage Public URL pattern for S3 backed bucket if applicable or direct S3
+                // Here assuming Supabase Storage is being used via S3 protocol compatibility
+                return `${import.meta.env.PUBLIC_SUPABASE_URL}/storage/v1/object/public/${process.env.AWS_BUCKET_NAME || 'products'}/${fileName}`;
+            } catch (err) {
+                console.error('S3 Upload Error:', err);
+                throw err;
+            }
+        };
+
+        let image_1, image_2, image_3;
+
+        try {
+            image_1 = await uploadFile(image1File);
+            image_2 = await uploadFile(image2File);
+            image_3 = await uploadFile(image3File);
+        } catch (err) {
+            return fail(500, { message: 'Erro ao fazer upload da imagem.' });
+        }
+
+        const { error } = await supabase
+            .from('products')
+            .insert([{
+                title,
+                price,
+                image_1,
+                image_2,
+                image_3,
+                buy_link,
+                category,
+                is_visible: true
+            }]);
+
+        if (error) {
+            console.error('Error creating product:', error);
+            return fail(500, { message: 'Erro ao criar produto. Tente novamente.' });
+        }
+
+        return { success: true };
+    },
+
+    delete: async ({ request }) => {
+        const formData = await request.formData();
+        const id = formData.get('id');
+
+        if (!id) {
+            return fail(400, { message: 'ID do produto inválido.' });
+        }
+
+        const { data: product, error: fetchError } = await supabase
+            .from('products')
+            .select('image_1, image_2, image_3')
+            .eq('id', id)
+            .single();
+
+        if (fetchError) {
+            console.error('Error fetching product for deletion:', fetchError);
+        } else if (product) {
+            const images = [product.image_1, product.image_2, product.image_3].filter(Boolean);
+            for (const imageUrl of images) {
+                try {
+                    const fileName = imageUrl.split('/').pop();
+                    await s3.send(new DeleteObjectCommand({
+                        Bucket: process.env.AWS_BUCKET_NAME || 'products',
+                        Key: fileName
+                    }));
+                } catch (err) {
+                    console.error('Error deleting image from S3:', err);
+                }
+            }
+        }
+
+        const { error } = await supabase.from('products').delete().eq('id', id);
+
+        if (error) {
+            console.error('Error deleting product:', error);
+            return fail(500, { message: 'Erro ao deletar produto.' });
+        }
+
+        return { success: true };
+    },
+
+    toggleVisibility: async ({ request }) => {
+        const formData = await request.formData();
+        const id = formData.get('id');
+        const is_visible = formData.get('is_visible') === 'true';
+
+        const { error } = await supabase.from('products').update({ is_visible: !is_visible }).eq('id', id);
+
+        if (error) {
+            return fail(500, { message: 'Erro ao alterar visibilidade.' });
+        }
+        return { success: true };
+    },
+
+    update: async ({ request }) => {
+        const formData = await request.formData();
+        const id = formData.get('id');
+        const title = formData.get('title');
+        const price = formData.get('price');
+        const buy_link = formData.get('buy_link');
+        const category = formData.get('category');
+        const image1File = formData.get('image_1');
+        const image2File = formData.get('image_2');
+        const image3File = formData.get('image_3');
+
+        if (!id || !title || !price || !category) {
+            return fail(400, { message: 'Campos obrigatórios faltando.' });
+        }
+
+        const uploadFile = async (file) => {
+            if (!file || file.size === 0) return null;
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+            const arrayBuffer = await file.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            await s3.send(new PutObjectCommand({
+                Bucket: process.env.AWS_BUCKET_NAME || 'products',
+                Key: fileName,
+                Body: buffer,
+                ContentType: file.type,
+                ACL: 'public-read'
+            }));
+            return `${import.meta.env.PUBLIC_SUPABASE_URL}/storage/v1/object/public/${process.env.AWS_BUCKET_NAME || 'products'}/${fileName}`;
+        };
+
+        const updates = { title, price, buy_link, category };
+        try {
+            if (image1File && image1File.size > 0) updates.image_1 = await uploadFile(image1File);
+            if (image2File && image2File.size > 0) updates.image_2 = await uploadFile(image2File);
+            if (image3File && image3File.size > 0) updates.image_3 = await uploadFile(image3File);
+        } catch (err) {
+            return fail(500, { message: 'Erro no upload de imagem.' });
+        }
+
+        const { error } = await supabase.from('products').update(updates).eq('id', id);
+
+        if (error) {
+            return fail(500, { message: 'Erro ao atualizar produto.' });
+        }
+        return { success: true };
+    },
+
+    updateOrder: async ({ request }) => {
+        const formData = await request.formData();
+        const orderJson = formData.get('order')?.toString();
+        if (!orderJson) return fail(400, { message: 'Dados inválidos.' });
+
+        const order = JSON.parse(orderJson);
+        const updates = order.map(item => supabase.from('products').update({ position: item.position }).eq('id', item.id));
+
+        await Promise.all(updates);
+        return { success: true };
+    }
+};
