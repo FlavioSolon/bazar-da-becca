@@ -1,4 +1,4 @@
-import { supabase, s3 } from '$lib/supabaseClient';
+import { supabase, s3, bucketName } from '$lib/supabaseClient';
 import { fail } from '@sveltejs/kit';
 import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
@@ -49,7 +49,7 @@ export const actions = {
 
             try {
                 await s3.send(new PutObjectCommand({
-                    Bucket: process.env.AWS_BUCKET_NAME || 'products',
+                    Bucket: bucketName,
                     Key: fileName,
                     Body: buffer,
                     ContentType: file.type,
@@ -57,7 +57,7 @@ export const actions = {
                 }));
                 // Using Supabase Storage Public URL pattern for S3 backed bucket if applicable or direct S3
                 // Here assuming Supabase Storage is being used via S3 protocol compatibility
-                return `${import.meta.env.PUBLIC_SUPABASE_URL}/storage/v1/object/public/${process.env.AWS_BUCKET_NAME || 'products'}/${fileName}`;
+                return `${supabase.supabaseUrl}/storage/v1/object/public/${bucketName}/${fileName}`;
             } catch (err) {
                 console.error('S3 Upload Error:', err);
                 throw err;
@@ -117,7 +117,7 @@ export const actions = {
                 try {
                     const fileName = imageUrl.split('/').pop();
                     await s3.send(new DeleteObjectCommand({
-                        Bucket: process.env.AWS_BUCKET_NAME || 'products',
+                        Bucket: bucketName,
                         Key: fileName
                     }));
                 } catch (err) {
@@ -171,13 +171,13 @@ export const actions = {
             const arrayBuffer = await file.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
             await s3.send(new PutObjectCommand({
-                Bucket: process.env.AWS_BUCKET_NAME || 'products',
+                Bucket: bucketName,
                 Key: fileName,
                 Body: buffer,
                 ContentType: file.type,
                 ACL: 'public-read'
             }));
-            return `${import.meta.env.PUBLIC_SUPABASE_URL}/storage/v1/object/public/${process.env.AWS_BUCKET_NAME || 'products'}/${fileName}`;
+            return `${supabase.supabaseUrl}/storage/v1/object/public/${bucketName}/${fileName}`;
         };
 
         const updates = { title, price, buy_link, category };

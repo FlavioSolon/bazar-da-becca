@@ -1,20 +1,20 @@
-import { createClient } from '@supabase/supabase-js'
-import { S3Client } from '@aws-sdk/client-s3'
+import { createClient } from '@supabase/supabase-js';
+import { S3Client } from '@aws-sdk/client-s3';
+import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
+import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_BUCKET_NAME } from '$env/static/private';
 
-const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY);
 
 // S3 Configuration
 export const s3Config = {
-    endpoint: `${import.meta.env.PUBLIC_SUPABASE_URL}/storage/v1/s3`,
-    region: import.meta.env.AWS_REGION,
+    endpoint: `${PUBLIC_SUPABASE_URL}/storage/v1/s3`,
+    region: AWS_REGION,
     credentials: {
-        accessKeyId: import.meta.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: import.meta.env.AWS_SECRET_ACCESS_KEY
+        accessKeyId: AWS_ACCESS_KEY_ID,
+        secretAccessKey: AWS_SECRET_ACCESS_KEY
     },
     forcePathStyle: true
-}
+};
 
-export const s3 = new S3Client(s3Config)
+export const s3 = new S3Client(s3Config);
+export const bucketName = AWS_BUCKET_NAME || 'products';
