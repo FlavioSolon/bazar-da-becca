@@ -1,5 +1,7 @@
 <script>
 	import { fade, fly } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
+	import { quintOut } from 'svelte/easing';
 	import tangerineFlower from '$lib/assets/tangerine.png';
 	import woodTexture from '$lib/assets/wood-texture.png';
 	import { onMount } from 'svelte';
@@ -162,33 +164,32 @@
 	}
 
 	// Responsive Transitions
-	// Mobile: Slide (fly)
-	// Desktop: 3D Flip (rotateY)
-
-	function responsiveIn(node, { delay = 0, duration = 600, direction = 1 }) {
+	function responsiveIn(node, { delay = 0, duration = 800, direction = 1 }) {
 		const isMobile = windowWidth < 768;
 
 		if (isMobile) {
 			return fly(node, {
 				x: 50 * direction,
-				duration: 400,
+				duration: 600,
 				delay,
-				opacity: 0
+				opacity: 0,
+				easing: quintOut
 			});
 		} else {
 			return flipIn(node, { delay, duration, direction });
 		}
 	}
 
-	function responsiveOut(node, { delay = 0, duration = 600, direction = 1 }) {
+	function responsiveOut(node, { delay = 0, duration = 800, direction = 1 }) {
 		const isMobile = windowWidth < 768;
 
 		if (isMobile) {
 			return fly(node, {
 				x: -50 * direction,
-				duration: 400,
+				duration: 600,
 				delay,
-				opacity: 0
+				opacity: 0,
+				easing: quintOut
 			});
 		} else {
 			return flipOut(node, { delay, duration, direction });
@@ -196,14 +197,12 @@
 	}
 
 	// 3D Flip Logic
-	function flipIn(node, { delay = 0, duration = 600, direction = 1 }) {
+	function flipIn(node, { delay = 0, duration = 800, direction = 1 }) {
 		return {
 			delay,
 			duration,
 			css: (t) => {
-				const eased = 1 - Math.pow(1 - t, 3); // cubic-out cubic easing
-				// If forward (1): Enter from right (rotateY 90 -> 0)
-				// If back (-1): Enter from left (rotateY -90 -> 0)
+				const eased = quintOut(t);
 				const start = direction === 1 ? 90 : -90;
 				const current = start * (1 - eased);
 				return `
@@ -215,7 +214,7 @@
 		};
 	}
 
-	function flipOut(node, { delay = 0, duration = 600, direction = 1 }) {
+	function flipOut(node, { delay = 0, duration = 800, direction = 1 }) {
 		return {
 			delay,
 			duration,
@@ -224,8 +223,8 @@
 				const end = direction === 1 ? -90 : 90;
 				// Manual easing for smoothness
 				const p = 1 - t; // p goes 0 -> 1 during exit
-				const bezier = p * p * (3 - 2 * p); // smoothstep-ish
-				const angle = end * bezier;
+				const easedP = quintOut(p); // easing on position
+				const angle = end * easedP;
 
 				return `
                     transform: rotateY(${angle}deg);
@@ -244,7 +243,7 @@
 		setTimeout(() => {
 			hasEntered = true;
 			doorOpen = true;
-		}, 500);
+		}, 300); // Quick initial reveal
 	});
 
 	const shelfStyle = `background-image: url('${woodTexture}'); box-shadow: inset 0 2px 5px rgba(0,0,0,0.4);`;
@@ -260,7 +259,7 @@
 	{#if !doorOpen}
 		<div
 			class="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center bg-[#1a0f0a] transition-opacity duration-1000"
-			out:fade={{ duration: 1500 }}
+			out:fade={{ duration: 1500, easing: quintOut }}
 		>
 			<div class="text-center">
 				<h1 class="font-display mb-4 text-4xl tracking-widest text-[#d4b483] uppercase">
@@ -314,7 +313,7 @@
 				<div class="relative">
 					<select
 						bind:value={sortOption}
-						class="font-display cursor-pointer appearance-none rounded-md border-2 border-[var(--color-camo-brown)] bg-[var(--color-paper-aged)] py-2 pr-10 pl-4 font-bold text-[var(--color-deep-forest)] shadow-sm focus:ring-2 focus:ring-[var(--color-moss-green)] focus:outline-none"
+						class="font-display cursor-pointer appearance-none rounded-md border-2 border-[var(--color-camo-brown)] bg-[var(--color-paper-aged)] py-2 pr-10 pl-4 font-bold text-[var(--color-deep-forest)] shadow-sm transition-shadow hover:shadow-md focus:ring-2 focus:ring-[var(--color-moss-green)] focus:outline-none"
 					>
 						<option value="recent">Mais Recentes</option>
 						<option value="price_asc">Preço: Menor para Maior</option>
@@ -333,15 +332,20 @@
 				</div>
 			</div>
 
-			<!-- Key block for pagination transition -->
-			{#key currentPage + sortOption}
+			<!-- Key block for pagination transition ONLY -->
+			<!-- When sorting, we stay in same page key, so flip animation works -->
+			{#key currentPage}
 				<div
 					in:responsiveIn={{ duration: 800, direction: navDirection }}
 					out:responsiveOut={{ duration: 800, direction: navDirection }}
 					class="grid origin-left grid-cols-1 gap-x-8 gap-y-16 md:grid-cols-2 md:gap-y-20 lg:grid-cols-3"
 				>
 					{#each paginatedBooks as book, i (book.id)}
-						<div class="group perspective-1000 relative flex flex-col items-center">
+						<div
+							animate:flip={{ duration: 600, easing: quintOut }}
+							in:fly={{ y: 20, duration: 600, delay: i * 80, easing: quintOut }}
+							class="group perspective-1000 relative flex flex-col items-center"
+						>
 							<!-- Book + Shelf Wrapper -->
 							<div class="relative w-full max-w-[280px] md:max-w-full">
 								<!-- Clickable Book Area -->
