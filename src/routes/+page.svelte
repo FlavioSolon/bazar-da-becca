@@ -123,9 +123,35 @@
 	let currentPage = 1;
 	const itemsPerPage = 6;
 	let navDirection = 1; // 1 = forward, -1 = backward
+	let windowWidth;
 
-	$: totalPages = Math.ceil(books.length / itemsPerPage);
-	$: paginatedBooks = books.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+	// Sorting State
+	let sortOption = 'recent'; // 'recent', 'price_asc', 'price_desc', 'title_asc'
+
+	// Reactive Sorting
+	$: sortedBooks = [...books].sort((a, b) => {
+		if (sortOption === 'price_asc') {
+			return (
+				parseFloat(a.price.replace('R$', '').replace(',', '.')) -
+				parseFloat(b.price.replace('R$', '').replace(',', '.'))
+			);
+		} else if (sortOption === 'price_desc') {
+			return (
+				parseFloat(b.price.replace('R$', '').replace(',', '.')) -
+				parseFloat(a.price.replace('R$', '').replace(',', '.'))
+			);
+		} else if (sortOption === 'title_asc') {
+			return a.title.localeCompare(b.title);
+		} else {
+			return b.id - a.id; // Recent (assuming higher ID is newer)
+		}
+	});
+
+	$: totalPages = Math.ceil(sortedBooks.length / itemsPerPage);
+	$: paginatedBooks = sortedBooks.slice(
+		(currentPage - 1) * itemsPerPage,
+		currentPage * itemsPerPage
+	);
 
 	function goToPage(p) {
 		if (p >= 1 && p <= totalPages) {
@@ -135,7 +161,41 @@
 		}
 	}
 
-	// Bi-directional Page Flip Transitions
+	// Responsive Transitions
+	// Mobile: Slide (fly)
+	// Desktop: 3D Flip (rotateY)
+
+	function responsiveIn(node, { delay = 0, duration = 600, direction = 1 }) {
+		const isMobile = windowWidth < 768;
+
+		if (isMobile) {
+			return fly(node, {
+				x: 50 * direction,
+				duration: 400,
+				delay,
+				opacity: 0
+			});
+		} else {
+			return flipIn(node, { delay, duration, direction });
+		}
+	}
+
+	function responsiveOut(node, { delay = 0, duration = 600, direction = 1 }) {
+		const isMobile = windowWidth < 768;
+
+		if (isMobile) {
+			return fly(node, {
+				x: -50 * direction,
+				duration: 400,
+				delay,
+				opacity: 0
+			});
+		} else {
+			return flipOut(node, { delay, duration, direction });
+		}
+	}
+
+	// 3D Flip Logic
 	function flipIn(node, { delay = 0, duration = 600, direction = 1 }) {
 		return {
 			delay,
@@ -160,17 +220,9 @@
 			delay,
 			duration,
 			css: (t) => {
-				// t goes 1 -> 0
-				const eased = 1 - Math.pow(1 - t, 3); // cubic-out from 1 to 0? No, t is 0->1 for in, 1->0 for out in Svelte?
-				// Actually for 'out' transition, t goes 1 -> 0.
-				// We want to animate FROM 0 TO -90 (if forward).
-				// At t=1 (start), angle 0. At t=0 (end), angle -90.
-
-				// If forward (1): Leave to left (rotateY 0 -> -90)
-				// If back (-1): Leave to right (rotateY 0 -> 90)
+				// We animate FROM 0 TO -90 (if forward)
 				const end = direction === 1 ? -90 : 90;
-				const current = end * (1 - t); // Linear connection to t (which already has easing if specified? No, strict linear t usually passed to css unless easing function used inside)
-				// Let's rely on manual easing for smoothness
+				// Manual easing for smoothness
 				const p = 1 - t; // p goes 0 -> 1 during exit
 				const bezier = p * p * (3 - 2 * p); // smoothstep-ish
 				const angle = end * bezier;
@@ -198,6 +250,8 @@
 	const shelfStyle = `background-image: url('${woodTexture}'); box-shadow: inset 0 2px 5px rgba(0,0,0,0.4);`;
 	const whatsappNumber = '5592981496477';
 </script>
+
+<svelte:window bind:innerWidth={windowWidth} />
 
 <div
 	class="bg-aged-paper relative min-h-screen overflow-x-hidden selection:bg-[var(--color-moss-green)] selection:text-[var(--color-paper-aged)]"
@@ -254,12 +308,36 @@
 		</header>
 
 		<!-- Bookshelf Container -->
-		<div id="bookshelf" class="perspective-1000 container mx-auto max-w-6xl px-4">
+		<div id="bookshelf" class="perspective-1000 relative container mx-auto max-w-6xl px-4">
+			<!-- Sorting Controls -->
+			<div class="mb-8 flex justify-end">
+				<div class="relative">
+					<select
+						bind:value={sortOption}
+						class="font-display cursor-pointer appearance-none rounded-md border-2 border-[var(--color-camo-brown)] bg-[var(--color-paper-aged)] py-2 pr-10 pl-4 font-bold text-[var(--color-deep-forest)] shadow-sm focus:ring-2 focus:ring-[var(--color-moss-green)] focus:outline-none"
+					>
+						<option value="recent">Mais Recentes</option>
+						<option value="price_asc">Preço: Menor para Maior</option>
+						<option value="price_desc">Preço: Maior para Menor</option>
+						<option value="title_asc">A-Z</option>
+					</select>
+					<div
+						class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--color-deep-forest)]"
+					>
+						<svg class="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+							><path
+								d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"
+							/></svg
+						>
+					</div>
+				</div>
+			</div>
+
 			<!-- Key block for pagination transition -->
-			{#key currentPage}
+			{#key currentPage + sortOption}
 				<div
-					in:flipIn={{ duration: 800, direction: navDirection }}
-					out:flipOut={{ duration: 800, direction: navDirection }}
+					in:responsiveIn={{ duration: 800, direction: navDirection }}
+					out:responsiveOut={{ duration: 800, direction: navDirection }}
 					class="grid origin-left grid-cols-1 gap-x-8 gap-y-16 md:grid-cols-2 md:gap-y-20 lg:grid-cols-3"
 				>
 					{#each paginatedBooks as book, i (book.id)}
