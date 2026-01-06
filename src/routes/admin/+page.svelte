@@ -754,7 +754,7 @@
 														class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {product.is_visible
 															? 'translate-x-6'
 															: 'translate-x-1'}"
-													/>
+													></span>
 												</button>
 											</form>
 										</td>
@@ -784,12 +784,17 @@
 								in:fly={{ y: 20, duration: 300 }}
 							>
 								{#if product.image_1}
-									<img
-										src={product.image_1}
-										alt={product.title}
-										class="h-24 w-24 rounded-lg bg-gray-100 object-cover"
+									<button
+										type="button"
+										class="h-24 w-24 overflow-hidden rounded-lg bg-gray-100 object-cover"
 										on:click={() => openImageModal(product.image_1)}
-									/>
+									>
+										<img
+											src={product.image_1}
+											alt={product.title}
+											class="h-full w-full object-cover"
+										/>
+									</button>
 								{/if}
 								<div class="min-w-0 flex-1">
 									<h3 class="truncate font-bold text-[var(--color-deep-forest)]">
